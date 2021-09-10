@@ -1,0 +1,358 @@
+﻿@page "/exam/{category:int}"
+@using HamTestWasm.Extensions
+@using Majorsoft.Blazor.Components.Common.JsInterop.Scroll
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<h1>Пробный экзамен для получения @Category квалификационной категории</h1>
+
+@if (!_formSubmitted)
+{
+    if (_test == null)
+    {
+        <p>
+            <em>Загрузка...</em>
+        </p>
+    }
+    else
+    {
+        switch (Category)
+        {
+            case 1:
+                <p class="fst-italic">
+                    Первая квалификационная категория соответствует полной лицензии СЕРТ. Для её получения нужно сдать теоретический экзамен по программе полной лицензии СЕРТ (T/R 61-02)
+                    и дополнительно продемонстрировать умение принять передаваемый азбукой Морзе текст объёмом 250 знаков со скоростью 60 знаков в минуту.
+                </p>
+                break;
+            case 2:
+                <p class="fst-italic">
+                    Вторая квалификационная категория соответствует полной лицензии СЕРТ. Для её получения нужно сдать теоретический экзамен по программе полной лицензии СЕРТ (T/R 61-02).
+                </p>
+                break;
+            case 3:
+                <p class="fst-italic">
+                    Третья квалификационная категория соответствует лицензии СЕРТ новичка. Для её получения нужно сдать теоретический экзамен по программе лицензии СЕРТ новичка (ERC32).
+                </p>
+                break;
+            case 4:
+                <p class="fst-italic">
+                    Четвёртая квалификационная категория не имеет соответствия какой – либо лицензии СЕРТ. Но для её получения нужно сдать теоретический экзамен по программе лицензии СЕРТ начального уровня (ECC 89).
+                </p>
+                break;
+        }
+
+        <p>Вопросы выбираются случайным образом из предназначенных для данной категории, при этом выбирается как минимум один вопрос из каждой темы.</p>
+
+        <p>
+            <NavLink class="btn btn-outline-secondary" href="" Match="NavLinkMatch.All">Отменить и вернуться на главный экран</NavLink>
+        </p>
+
+        var qNum = 1;
+
+        <EditForm EditContext="_editContext" OnInvalidSubmit="@HandleInvalidSubmit" OnValidSubmit="@HandleValidSubmit">
+
+            @foreach (var t in _test.Topics)
+            {
+                <h2 style="margin-bottom: 1rem;text-align: center; " class="text-decoration-underline">Тема: @t.Name</h2>
+
+                @foreach (var q in t.Questions)
+                {
+                    string qName = "question" + qNum;
+
+                    <div style="margin-bottom: 2rem;">
+
+                        <div class="d-flex justify-content-start">
+                            <p style="margin-right: 1rem;">
+                                <span class="badge bg-primary" style="width: 2rem;">@qNum</span>
+                            </p>
+                            <p class="blockquote">
+                                @q.Text
+                                <CustomValidationMessage For="() => q.SelectedAnswerIndex" Class="badge bg-danger"/>
+                            </p>
+                        </div>
+
+                        <InputRadioGroup @bind-Value="q.SelectedAnswerIndex">
+
+                            @for (int i = 0; i < 4; i++)
+                            {
+                                <div class="form-check d-flex justify-content-start" style="">
+                                    <div style="padding: 0.15rem 0.25rem 0.15rem 3.25rem;">
+                                        <InputRadio Value="@i" class="form-check-input" id="@(qName + i)"/>
+                                    </div>
+                                    <label class="form-check-label" for="@(qName + i)" style="margin-right: 3rem; padding: 0.15rem 0; min-width: 10rem;">
+                                        @q.Answers[i]
+                                    </label>
+                                </div>
+                            }
+
+                        </InputRadioGroup>
+                    </div>
+                    qNum++;
+                }
+            }
+
+            <div class="btn-group" role="group" aria-label="Basic example">
+                <button type="submit" class="btn btn-primary @(_formSubmitted ? "disabled" : "")">Проверить результаты</button>
+                <NavLink class="btn btn-outline-secondary" href="" Match="NavLinkMatch.All">Отменить и вернуться на главный экран</NavLink>
+                @* <button type="button" class="btn btn-secondary" @onclick="() => { NavigationManager.NavigateTo(null); }">Отменить и вернуться на главный экран</button> *@
+            </div>
+        </EditForm>
+    }
+}
+else
+{
+    if (_test.RightCount == _test.TotalCount)
+    {
+        <div class="alert alert-success">Поздравляем! Вы успешно сдали экзамен, ответив правильно на все @_test.TotalCount вопросов!</div>
+    }
+    else if (_test.RightCount < _test.TotalCount && _test.RightCount >= _test.EnoughCount)
+    {
+        <div class="alert alert-warning">Поздравляем! Вы успешно сдали экзамен ответив правильно на @_test.RightCount вопросов из @_test.TotalCount.</div>
+    }
+    else
+    {
+        <div class="alert alert-danger">К сожалению, вы не сдали экзамен. Вы ответили правильно на @_test.RightCount вопросов из @_test.TotalCount.</div>
+    }
+
+    if (_test.RightCount < _test.TotalCount)
+    {
+        <p>Вопросы, в которых вы допустили ошибки:</p>
+
+        <ul class="list-group list-group-flush">
+            @foreach (var wrong in _test.WrongAnsweredQuestions)
+            {
+                <li class="list-group-item">
+                    <div style="margin-bottom: 2rem;">
+                        <blockquote class="blockquote fw-bold">
+                            <p>
+                                @wrong.Text
+                            </p>
+                        </blockquote>
+
+                        <div class="row" style="margin-bottom: 1rem;">
+                            <div class="col-3">
+                                Вы ответили:
+                            </div>
+                            <div class="col-8">
+                                <span class="text-danger">@wrong.Answers[(int) wrong.SelectedAnswerIndex]</span>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-3">
+                                Правильный ответ:
+                            </div>
+                            <div class="col-8">
+                                <span class="text-success fw-bold">@wrong.Answers[wrong.RightAnswerIndex]</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+
+    <button class="btn btn-primary" @onclick="ReInit">Пройти тест еще раз</button>
+    <a class="btn btn-secondary" href="/">Вернуться на главный экран</a>
+}
+
+@inject IScrollHandler _scrollHandler
+
+@code {
+    private EditContext _editContext;
+    private Test _test;
+    private ValidationMessageStore _messageStore;
+    private bool _formSubmitted = false;
+
+    [Parameter]
+    public int Category { get; set; }
+
+    TopicDto[] _topicDtos;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _topicDtos = await Http.GetFromJsonAsync<TopicDto[]>("questions.json");
+    }
+
+    void ReInit()
+    {
+        _test = new Test(_topicDtos, Category);
+
+        if (_editContext == null)
+        {
+            _editContext = new EditContext(_test);
+            _editContext.OnValidationRequested += HandleValidationRequested;
+        }
+
+        if (_messageStore == null)
+            _messageStore = new(_editContext);
+        else
+            _messageStore.Clear();
+
+        _formSubmitted = false;
+    }
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+
+        if (Category < 1 || Category > 4)
+        {
+            NavigationManager.NavigateTo("404");
+            return;
+        }
+
+        if (_topicDtos != null)
+            ReInit();
+    }
+
+    private void HandleInvalidSubmit()
+    {
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        _formSubmitted = true;
+        await _scrollHandler.ScrollToPageTopAsync(true);
+    }
+
+    private void HandleValidationRequested(object sender,
+        ValidationRequestedEventArgs args)
+    {
+        _messageStore.Clear();
+
+        foreach (var q in _test.Topics.SelectMany(t => t.Questions))
+        {
+            if (q.SelectedAnswerIndex == null)
+                _messageStore.Add(() => q.SelectedAnswerIndex, "Выберите ответ");
+        }
+    }
+
+    public void Dispose()
+    {
+        _editContext.OnValidationRequested -= HandleValidationRequested;
+    }
+
+    public class QuestionDto
+    {
+        public int[] Cat { get; set; }
+        public string Q { get; set; }
+        public string[] A { get; set; }
+    }
+
+    public class TopicDto
+    {
+        public string Name { get; set; }
+        public QuestionDto[] Questions { get; set; }
+
+        public IEnumerable<QuestionDto> GetAllQuestionsForCategory(int category)
+        {
+            return Questions.Where(q => q.Cat.Contains(category));
+        }
+    }
+
+    public class Test
+    {
+        private readonly int _category;
+        public Topic[] Topics { get; set; }
+
+        public Test(TopicDto[] topics, int category)
+        {
+            _category = category;
+
+            var allQuestionsByTopics = topics
+                .Select(t => new
+                {
+                    TopicName = t.Name,
+                    Questions = t.GetAllQuestionsForCategory(category).Select((q, i) => new QuestionModel(i, q.Q, q.A)).ToArray()
+                }).ToArray();
+
+            var totalLoadedQuestions = allQuestionsByTopics.Sum(t => t.Questions.Length);
+            Console.WriteLine($"Total loaded questions: {totalLoadedQuestions}");
+
+            var rng = new Random();
+            var randomQuestions = new HashSet<QuestionModel>();
+            foreach (var t in allQuestionsByTopics)
+            {
+                randomQuestions.Add(t.Questions.OrderBy(x => rng.Next()).First());
+            }
+
+            var restQuestions = allQuestionsByTopics.SelectMany(t => t.Questions).Except(randomQuestions).OrderBy(x => rng.Next()).Take(TotalCount - randomQuestions.Count());
+            foreach (var q in restQuestions)
+            {
+                randomQuestions.Add(q);
+            }
+
+            Topics = allQuestionsByTopics.Select(t => new Topic()
+            {
+                Name = t.TopicName,
+                Questions = t.Questions.Where(q => randomQuestions.Contains(q)).OrderBy(q => q.Num).ToArray()
+            }).ToArray();
+        }
+
+        public int RightCount => Topics.SelectMany(t => t.Questions).Count(q => q.IsRight);
+
+        public int TotalCount => _category switch
+        {
+            1 => 45,
+            2 => 30,
+            3 => 25,
+            4 => 20,
+            _ => 0
+            };
+
+        public int EnoughCount => _category switch
+        {
+            1 => 40,
+            2 => 25,
+            3 => 20,
+            4 => 15,
+            _ => 0
+            };
+
+        public IEnumerable<QuestionModel> WrongAnsweredQuestions => Topics.SelectMany(t => t.Questions).Where(q => !q.IsRight && q.SelectedAnswerIndex != null);
+    }
+
+    public class Topic
+    {
+        public string Name { get; set; }
+        public QuestionModel[] Questions { get; set; }
+    }
+
+    public class QuestionModel
+    {
+        public int Num { get; }
+        public string Text { get; }
+        public string[] Answers { get; }
+        public int? SelectedAnswerIndex { get; set; }
+
+        public int RightAnswerIndex { get; }
+
+        public QuestionModel(int num, string text, params string[] answers)
+        {
+    // Console.WriteLine($"text: {text},\n" +
+    //                   $" answers: {answers[0]}\n" +
+    //                   $" answers: {answers[1]}\n" +
+    //                   $" answers: {answers[2]}\n" +
+    //                   $" answers: {answers[3]}\n");
+            Num = num;
+            Text = text;
+            Answers = answers.ToArray();
+            string rightAnswer = Answers.SingleOrDefault(a => a[0] == '@');
+
+            if (rightAnswer == null)
+                throw new Exception($"Invalid question: {text}");
+
+            var rng = new Random();
+            rng.Shuffle(Answers);
+            RightAnswerIndex = Answers.Select((a, i) => new {a, i}).Single(x => x.a == rightAnswer).i;
+            Answers[RightAnswerIndex] = Answers[RightAnswerIndex].Substring(1);
+        }
+
+        public bool IsRight => RightAnswerIndex == SelectedAnswerIndex;
+    }
+
+
+
+}
