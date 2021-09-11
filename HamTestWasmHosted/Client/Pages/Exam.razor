@@ -1,6 +1,9 @@
 ﻿@page "/exam/{category:int}"
 @using HamTestWasm.Extensions
+@using HamTestWasmHosted.Shared.Dto
+@using HamTestWasmHosted.Shared.Form
 @using Majorsoft.Blazor.Components.Common.JsInterop.Scroll
+@using Microsoft.AspNetCore.Components
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
 
@@ -8,7 +11,7 @@
 
 @if (!_formSubmitted)
 {
-    if (_test == null)
+    if (exam == null)
     {
         <p>
             <em>Загрузка...</em>
@@ -51,13 +54,14 @@
 
         <EditForm EditContext="_editContext" OnInvalidSubmit="@HandleInvalidSubmit" OnValidSubmit="@HandleValidSubmit">
 
-            @foreach (var t in _test.Topics)
+            @foreach (var t in exam.Topics)
             {
                 <h2 style="margin-bottom: 1rem;text-align: center; " class="text-decoration-underline">Тема: @t.Name</h2>
 
-                @foreach (var q in t.Questions)
+                foreach (var q in t.Questions)
                 {
                     string qName = "question" + qNum;
+                    int qIndex = qNum - 1;
 
                     <div style="margin-bottom: 2rem;">
 
@@ -67,11 +71,11 @@
                             </p>
                             <p class="blockquote">
                                 @q.Text
-                                <CustomValidationMessage For="() => q.SelectedAnswerIndex" Class="badge bg-danger"/>
+                                <CustomValidationMessage For="() => form.AnswerIndices[qIndex].Value" Class="badge bg-danger"/>
                             </p>
                         </div>
 
-                        <InputRadioGroup @bind-Value="q.SelectedAnswerIndex">
+                        <InputRadioGroup @bind-Value="form.AnswerIndices[qIndex].Value">
 
                             @for (int i = 0; i < 4; i++)
                             {
@@ -94,38 +98,41 @@
             <div class="btn-group" role="group" aria-label="Basic example">
                 <button type="submit" class="btn btn-primary @(_formSubmitted ? "disabled" : "")">Проверить результаты</button>
                 <NavLink class="btn btn-outline-secondary" href="" Match="NavLinkMatch.All">Отменить и вернуться на главный экран</NavLink>
-                @* <button type="button" class="btn btn-secondary" @onclick="() => { NavigationManager.NavigateTo(null); }">Отменить и вернуться на главный экран</button> *@
             </div>
         </EditForm>
     }
 }
 else
 {
-    if (_test.RightCount == _test.TotalCount)
+    if (checkResult.Data.Count == 0)
     {
-        <div class="alert alert-success">Поздравляем! Вы успешно сдали экзамен, ответив правильно на все @_test.TotalCount вопросов!</div>
+        <div class="alert alert-success">Поздравляем! Вы успешно сдали экзамен, ответив правильно на все @exam.TotalCount вопросов!</div>
     }
-    else if (_test.RightCount < _test.TotalCount && _test.RightCount >= _test.EnoughCount)
+    else if (checkResult.Data.Count > 0 && checkResult.Data.Count <= exam.MaxWrongAnswers)
     {
-        <div class="alert alert-warning">Поздравляем! Вы успешно сдали экзамен ответив правильно на @_test.RightCount вопросов из @_test.TotalCount.</div>
+        <div class="alert alert-warning">Поздравляем! Вы успешно сдали экзамен ответив правильно на @(exam.TotalCount - checkResult.Data.Count) вопросов из @exam.TotalCount.</div>
     }
     else
     {
-        <div class="alert alert-danger">К сожалению, вы не сдали экзамен. Вы ответили правильно на @_test.RightCount вопросов из @_test.TotalCount.</div>
+        <div class="alert alert-danger">К сожалению, вы не сдали экзамен. Вы ответили правильно на @(exam.TotalCount - checkResult.Data.Count) вопросов из @exam.TotalCount.</div>
     }
 
-    if (_test.RightCount < _test.TotalCount)
+    if (checkResult.Data.Count > 0)
     {
         <p>Вопросы, в которых вы допустили ошибки:</p>
 
+
+        var allQuestions = exam.AllQuestions.ToList();
+
         <ul class="list-group list-group-flush">
-            @foreach (var wrong in _test.WrongAnsweredQuestions)
+            @for (var index = 0; index < checkResult.Data.Count; index++)
             {
+                var wrong = checkResult.Data[index];
                 <li class="list-group-item">
                     <div style="margin-bottom: 2rem;">
                         <blockquote class="blockquote fw-bold">
                             <p>
-                                @wrong.Text
+                                @allQuestions[wrong[0]].Text
                             </p>
                         </blockquote>
 
@@ -134,7 +141,9 @@ else
                                 Вы ответили:
                             </div>
                             <div class="col-8">
-                                <span class="text-danger">@wrong.Answers[(int) wrong.SelectedAnswerIndex]</span>
+                                <span class="text-danger">
+                                    @allQuestions[wrong[0]].Answers[wrong[2]]
+                                </span>
                             </div>
                         </div>
 
@@ -143,7 +152,9 @@ else
                                 Правильный ответ:
                             </div>
                             <div class="col-8">
-                                <span class="text-success fw-bold">@wrong.Answers[wrong.RightAnswerIndex]</span>
+                                <span class="text-success fw-bold">
+                                    @allQuestions[wrong[0]].Answers[wrong[1]]
+                                </span>
                             </div>
                         </div>
 
@@ -153,7 +164,7 @@ else
         </ul>
     }
 
-    <button class="btn btn-primary" @onclick="ReInit">Пройти тест еще раз</button>
+    <button class="btn btn-primary" @onclick="ReInitAsync">Пройти тест еще раз</button>
     <a class="btn btn-secondary" href="/">Вернуться на главный экран</a>
 }
 
@@ -161,27 +172,43 @@ else
 
 @code {
     private EditContext _editContext;
-    private Test _test;
     private ValidationMessageStore _messageStore;
     private bool _formSubmitted = false;
 
     [Parameter]
     public int Category { get; set; }
 
-    TopicDto[] _topicDtos;
+    ExamDto exam;
+    ExamResultForm form;
+    ExamCheckResultDto checkResult;
 
     protected override async Task OnInitializedAsync()
     {
-        _topicDtos = await Http.GetFromJsonAsync<TopicDto[]>("questions.json");
     }
 
-    void ReInit()
+    protected override async Task OnParametersSetAsync()
     {
-        _test = new Test(_topicDtos, Category);
+        await base.OnParametersSetAsync();
+
+        if (Category < 1 || Category > 4)
+        {
+            NavigationManager.NavigateTo("404");
+            return;
+        }
+
+        await ReInitAsync();
+    }
+
+    async Task ReInitAsync()
+    {
+        using var response = await Http.PostAsync($"test/{Category}/new", new StringContent(""));
+        exam = await response.Content.ReadFromJsonAsync<ExamDto>();
+
+        form = new ExamResultForm(exam.TotalCount);
 
         if (_editContext == null)
         {
-            _editContext = new EditContext(_test);
+            _editContext = new(exam);
             _editContext.OnValidationRequested += HandleValidationRequested;
         }
 
@@ -193,26 +220,21 @@ else
         _formSubmitted = false;
     }
 
-    protected override void OnParametersSet()
-    {
-        base.OnParametersSet();
-
-        if (Category < 1 || Category > 4)
-        {
-            NavigationManager.NavigateTo("404");
-            return;
-        }
-
-        if (_topicDtos != null)
-            ReInit();
-    }
-
     private void HandleInvalidSubmit()
     {
     }
 
     private async Task HandleValidSubmit()
     {
+        var request = new ExamResultRequest
+        {
+            Token = exam.Token,
+            AnswerIndices = form.AnswerIndices.Select(x=>x.Value).ToArray()
+        };
+
+        using var response = await Http.PostAsJsonAsync($"test/{Category}/check", request );
+        checkResult = await response.Content.ReadFromJsonAsync<ExamCheckResultDto>();
+        
         _formSubmitted = true;
         await _scrollHandler.ScrollToPageTopAsync(true);
     }
@@ -222,10 +244,10 @@ else
     {
         _messageStore.Clear();
 
-        foreach (var q in _test.Topics.SelectMany(t => t.Questions))
+        foreach (var aIndex in form.AnswerIndices)
         {
-            if (q.SelectedAnswerIndex == null)
-                _messageStore.Add(() => q.SelectedAnswerIndex, "Выберите ответ");
+            if (aIndex.Value == null)
+                _messageStore.Add(() => aIndex.Value, "Выберите ответ");
         }
     }
 
@@ -233,126 +255,4 @@ else
     {
         _editContext.OnValidationRequested -= HandleValidationRequested;
     }
-
-    public class QuestionDto
-    {
-        public int[] Cat { get; set; }
-        public string Q { get; set; }
-        public string[] A { get; set; }
-    }
-
-    public class TopicDto
-    {
-        public string Name { get; set; }
-        public QuestionDto[] Questions { get; set; }
-
-        public IEnumerable<QuestionDto> GetAllQuestionsForCategory(int category)
-        {
-            return Questions.Where(q => q.Cat.Contains(category));
-        }
-    }
-
-    public class Test
-    {
-        private readonly int _category;
-        public Topic[] Topics { get; set; }
-
-        public Test(TopicDto[] topics, int category)
-        {
-            _category = category;
-
-            var allQuestionsByTopics = topics
-                .Select(t => new
-                {
-                    TopicName = t.Name,
-                    Questions = t.GetAllQuestionsForCategory(category).Select((q, i) => new QuestionModel(i, q.Q, q.A)).ToArray()
-                }).ToArray();
-
-            var totalLoadedQuestions = allQuestionsByTopics.Sum(t => t.Questions.Length);
-            Console.WriteLine($"Total loaded questions: {totalLoadedQuestions}");
-
-            var rng = new Random();
-            var randomQuestions = new HashSet<QuestionModel>();
-            foreach (var t in allQuestionsByTopics)
-            {
-                randomQuestions.Add(t.Questions.OrderBy(x => rng.Next()).First());
-            }
-
-            var restQuestions = allQuestionsByTopics.SelectMany(t => t.Questions).Except(randomQuestions).OrderBy(x => rng.Next()).Take(TotalCount - randomQuestions.Count());
-            foreach (var q in restQuestions)
-            {
-                randomQuestions.Add(q);
-            }
-
-            Topics = allQuestionsByTopics.Select(t => new Topic()
-            {
-                Name = t.TopicName,
-                Questions = t.Questions.Where(q => randomQuestions.Contains(q)).OrderBy(q => q.Num).ToArray()
-            }).ToArray();
-        }
-
-        public int RightCount => Topics.SelectMany(t => t.Questions).Count(q => q.IsRight);
-
-        public int TotalCount => _category switch
-        {
-            1 => 45,
-            2 => 30,
-            3 => 25,
-            4 => 20,
-            _ => 0
-            };
-
-        public int EnoughCount => _category switch
-        {
-            1 => 40,
-            2 => 25,
-            3 => 20,
-            4 => 15,
-            _ => 0
-            };
-
-        public IEnumerable<QuestionModel> WrongAnsweredQuestions => Topics.SelectMany(t => t.Questions).Where(q => !q.IsRight && q.SelectedAnswerIndex != null);
-    }
-
-    public class Topic
-    {
-        public string Name { get; set; }
-        public QuestionModel[] Questions { get; set; }
-    }
-
-    public class QuestionModel
-    {
-        public int Num { get; }
-        public string Text { get; }
-        public string[] Answers { get; }
-        public int? SelectedAnswerIndex { get; set; }
-
-        public int RightAnswerIndex { get; }
-
-        public QuestionModel(int num, string text, params string[] answers)
-        {
-    // Console.WriteLine($"text: {text},\n" +
-    //                   $" answers: {answers[0]}\n" +
-    //                   $" answers: {answers[1]}\n" +
-    //                   $" answers: {answers[2]}\n" +
-    //                   $" answers: {answers[3]}\n");
-            Num = num;
-            Text = text;
-            Answers = answers.ToArray();
-            string rightAnswer = Answers.SingleOrDefault(a => a[0] == '@');
-
-            if (rightAnswer == null)
-                throw new Exception($"Invalid question: {text}");
-
-            var rng = new Random();
-            rng.Shuffle(Answers);
-            RightAnswerIndex = Answers.Select((a, i) => new {a, i}).Single(x => x.a == rightAnswer).i;
-            Answers[RightAnswerIndex] = Answers[RightAnswerIndex].Substring(1);
-        }
-
-        public bool IsRight => RightAnswerIndex == SelectedAnswerIndex;
-    }
-
-
-
 }
