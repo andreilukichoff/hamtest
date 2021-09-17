@@ -6,6 +6,7 @@ using HamTestWasmHosted.Server.Domain;
 using HamTestWasmHosted.Server.Services;
 using HamTestWasmHosted.Shared.Dto;
 using HamTestWasmHosted.Shared.Form;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -18,12 +19,15 @@ namespace HamTestWasmHosted.Server.Controllers
         private readonly ILogger<TestController> _logger;
         private readonly CipherService _cipherService;
         private readonly ExamService _examService;
+        private readonly IWebHostEnvironment _webHostEnvironment;
 
-        public TestController(ILogger<TestController> logger, CipherService cipherService)
+        public TestController(ILogger<TestController> logger, CipherService cipherService, ExamService examService,
+            IWebHostEnvironment webHostEnvironment)
         {
             _logger = logger;
             _cipherService = cipherService;
-            _examService = ExamService.Instance;
+            _examService = examService;
+            _webHostEnvironment = webHostEnvironment;
         }
 
         [HttpPost("{category}/new")]
@@ -36,8 +40,9 @@ namespace HamTestWasmHosted.Server.Controllers
 
             var topicList = new List<TopicDto>();
             var grouped = exam.Questions.GroupBy(q => q.Topic).ToList();
-            foreach (var g in grouped)
+            for (var index = 0; index < grouped.Count; index++)
             {
+                var g = grouped[index];
                 var t = new TopicDto()
                 {
                     Name = g.Key.Name,
@@ -52,6 +57,8 @@ namespace HamTestWasmHosted.Server.Controllers
                     {
                         Text = question.Text,
                         Answers = answers,
+                        HasImage = question.HasImage ? true : null,
+                        Num = question.Num
                     });
                 }
 
@@ -63,7 +70,7 @@ namespace HamTestWasmHosted.Server.Controllers
                 ExpiresAt = DateTime.UtcNow.AddHours(category == 1 ? 1.5 : 1),
                 Seed = seed
             }));
-            
+
             var examDto = new ExamDto()
             {
                 Category = category,

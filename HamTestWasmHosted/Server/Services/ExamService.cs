@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -7,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using HamTestWasmHosted.Server.Domain;
 using HamTestWasmHosted.Shared.Form;
+using Microsoft.AspNetCore.Hosting;
 
 namespace HamTestWasmHosted.Server.Services
 {
@@ -30,15 +32,7 @@ namespace HamTestWasmHosted.Server.Services
             public int RightAnswerIndex => A.Select((s, i) => new {s, i}).Single(x => x.s.First() == '@').i;
         }
 
-        public static ExamService Instance { get; } = new();
-        
         private readonly List<Question> _questions = new();
-
-        // Explicit static constructor to tell C# compiler
-        // not to mark type as beforefieldinit
-        static ExamService()
-        {
-        }
 
         public int GetTotalCount(int category) => category switch
         {
@@ -58,21 +52,23 @@ namespace HamTestWasmHosted.Server.Services
             _ => throw new ArgumentOutOfRangeException(nameof(category), category, null)
         };
 
-        private ExamService()
+        public ExamService(IWebHostEnvironment webHostEnvironment)
         {
             var http = new HttpClient();
             var _topicDtos = JsonSerializer.Deserialize<TopicJsonDto[]>(File.ReadAllText("questions.json"));
 
-            int num = 0;
+            int num = 1;
             foreach (var topicDto in _topicDtos)
             {
                 var t = new Topic(topicDto.Name);
                 foreach (var questionDto in topicDto.Questions)
                 {
-                    var question = new Question(t, num++, questionDto.Q, questionDto.RightAnswerIndex, questionDto.Cat,
-                        questionDto.A);
+                    var info = webHostEnvironment.WebRootFileProvider.GetFileInfo($"i/{num}.png");
+                    var question = new Question(t, num, questionDto.Q, questionDto.RightAnswerIndex, questionDto.Cat,
+                        info.Exists, questionDto.A);
                     
                     _questions.Add(question);
+                    num++;
                 }
             }
         }
@@ -81,12 +77,13 @@ namespace HamTestWasmHosted.Server.Services
         {
             var randomQuestions = new List<Question>(); 
 
-            foreach (var g in _questions.GroupBy(q=>q.Topic))
+            foreach (var g in _questions.Where(q=>q.Categories.Contains(cat)).GroupBy(q=>q.Topic))
             {
                 randomQuestions.Add(g.OrderBy(_ => random.Next()).First());
             }
 
             var rest = _questions
+                .Where(q=>q.Categories.Contains(cat))
                 .Except(randomQuestions)
                 .OrderBy(_ => random.Next())
                 .Take(GetTotalCount(cat) - randomQuestions.Count);

@@ -24,6 +24,7 @@ namespace HamTestWasmHosted.Server
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddSingleton<CipherService>();
+            services.AddSingleton<ExamService>();
             
             services.AddDataProtection()
                 .UseCryptographicAlgorithms(new AuthenticatedEncryptorConfiguration()
@@ -31,7 +32,12 @@ namespace HamTestWasmHosted.Server
                     EncryptionAlgorithm = EncryptionAlgorithm.AES_256_GCM,
                     ValidationAlgorithm = ValidationAlgorithm.HMACSHA256
                 });
-            services.AddControllersWithViews();
+            
+            services.AddControllersWithViews().AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.IgnoreNullValues = true;
+            });
+            
             services.AddRazorPages();
         }
 

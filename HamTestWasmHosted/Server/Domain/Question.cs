@@ -13,8 +13,10 @@ namespace HamTestWasmHosted.Server.Domain
         public int[] Categories { get; }
 
         public Topic Topic { get; }
+        
+        public bool HasImage { get; }
 
-        public Question(Topic topic,int num, string text, int rightAnswerIndex, int[] cat, params string[] answers)
+        public Question(Topic topic, int num, string text, int rightAnswerIndex, int[] cat, bool hasImage, params string[] answers)
         {
             if (cat == null)
                 throw new ArgumentNullException(nameof(cat));
@@ -38,6 +40,7 @@ namespace HamTestWasmHosted.Server.Domain
             RightAnswerIndex = rightAnswerIndex;
             Answers = answers.Select(a => a.Trim('@')).ToArray();
             Categories = cat;
+            HasImage = hasImage;
         }
 
         public (string[] answers, int rightAnswerNewIndex) GetShuffledAnswers(Random random)

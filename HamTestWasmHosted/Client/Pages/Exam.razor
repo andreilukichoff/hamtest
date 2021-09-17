@@ -73,7 +73,15 @@
                                 @q.Text
                                 <CustomValidationMessage For="() => form.AnswerIndices[qIndex].Value" Class="badge bg-danger"/>
                             </p>
+
                         </div>
+
+                        @if (q.HasImage != null && q.HasImage.Value)
+                        {
+                            <div class="d-flex justify-content-center text-center" style="margin-bottom: 1em;">
+                                <img src="i/@(q.Num).png" class="img-fluid" style="margin-left: 3rem; width: 100%; max-width: 600px;"/>
+                            </div>
+                        }
 
                         <InputRadioGroup @bind-Value="form.AnswerIndices[qIndex].Value">
 
@@ -135,6 +143,13 @@ else
                                 @allQuestions[wrong[0]].Text
                             </p>
                         </blockquote>
+                        
+                        @if (allQuestions[wrong[0]].HasImage != null && allQuestions[wrong[0]].HasImage.Value)
+                        {
+                            <div class="d-flex justify-content-center text-center" style="margin-bottom: 1em;">
+                                <img src="i/@(allQuestions[wrong[0]].Num).png" class="img-fluid" style="margin-left: 3rem; width: 100%; max-width: 600px;"/>
+                            </div>
+                        }
 
                         <div class="row" style="margin-bottom: 1rem;">
                             <div class="col-3">
@@ -218,6 +233,7 @@ else
             _messageStore.Clear();
 
         _formSubmitted = false;
+        await _scrollHandler.ScrollToPageTopAsync(true);
     }
 
     private void HandleInvalidSubmit()
@@ -229,12 +245,12 @@ else
         var request = new ExamResultRequest
         {
             Token = exam.Token,
-            AnswerIndices = form.AnswerIndices.Select(x=>x.Value).ToArray()
+            AnswerIndices = form.AnswerIndices.Select(x => x.Value).ToArray()
         };
 
-        using var response = await Http.PostAsJsonAsync($"test/{Category}/check", request );
+        using var response = await Http.PostAsJsonAsync($"test/{Category}/check", request);
         checkResult = await response.Content.ReadFromJsonAsync<ExamCheckResultDto>();
-        
+
         _formSubmitted = true;
         await _scrollHandler.ScrollToPageTopAsync(true);
     }
@@ -255,4 +271,5 @@ else
     {
         _editContext.OnValidationRequested -= HandleValidationRequested;
     }
+
 }
