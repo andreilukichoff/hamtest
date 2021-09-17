@@ -29,7 +29,7 @@ namespace HamTestWasmHosted.Server
             services.AddDataProtection()
                 .UseCryptographicAlgorithms(new AuthenticatedEncryptorConfiguration()
                 {
-                    EncryptionAlgorithm = EncryptionAlgorithm.AES_256_GCM,
+                    EncryptionAlgorithm = EncryptionAlgorithm.AES_128_CBC,
                     ValidationAlgorithm = ValidationAlgorithm.HMACSHA256
                 });
             
